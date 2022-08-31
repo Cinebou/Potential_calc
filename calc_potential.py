@@ -11,7 +11,7 @@ class Potential():
     def __init__(self):
         self.avogadro = 6.02214e23  # /mol
         self.R = 8.31446261815324 / 1000  # kJ/K/mol
-        self.k_charge = 8.987552e9
+        self.k_charge = (1.60217733e-19)**2*1e10*8.987552e9 * self.avogadro /1000  # kJ/mol * Å/C^2
 
         self.num_atom_in_molecule = 3
 
@@ -29,7 +29,7 @@ class Potential():
     # read the pdb file
     def __import_position(self):
         f_cols=['A','number','atom','M','x','y','z','b','c','atom spec']
-        self.pos_CO2 = pd.read_csv(self.CO2_file, delim_whitespace = True, skiprows=2, header=None,names=f_cols)
+        self.pos_CO2 = pd.read_csv(self.CO2_file, delim_whitespace = True,header=None,names=f_cols)
         self.num_CO2 = len(self.pos_CO2) / self.num_atom_in_molecule
         self.pos_frame = pd.read_csv(self.frame_file, delim_whitespace = True, skiprows=1, header=None,names=f_cols)[:-1]
 
@@ -116,6 +116,15 @@ class Potential():
         return pot_each
 
 
+    # electric potential calculation for each pairs
+    def charge_each(self, molA, molB):
+        r2_ = self.distance_2(molA, molB)
+        qA = self.params_charge(molA['atom'])
+        qB = self.params_charge(molB['atom'])
+        charge_each = self.charge_function(r2_, qA, qB)
+        return charge_each
+
+
     # LJ potential loop for all molecules pairs of frame and CO2
     def LJ_CO2_frame(self):
         LJ_pot_all = 0
@@ -126,7 +135,20 @@ class Potential():
             for indexFrame, rowFrame in self.pos_frame.iterrows():
                 frame_atom = rowFrame
                 LJ_pot_all += self.LJ_each(CO2_atom, frame_atom)
-        return LJ_pot_all / self.R
+        return LJ_pot_all * self.R
+
+
+    # electric potential loop for all molecules pairs of frame and CO2
+    def charge_CO2_frame(self):
+        charge_pot_all = 0
+        # for loop (CO2 molecules)
+        for indexCO2, rowCO2 in self.pos_CO2.iterrows():
+            CO2_atom = rowCO2
+            # for loop (frameworks)
+            for indexFrame, rowFrame in self.pos_frame.iterrows():
+                frame_atom = rowFrame
+                charge_pot_all += self.charge_each(CO2_atom, frame_atom)
+        return charge_pot_all * self.k_charge
 
 
 
@@ -144,7 +166,25 @@ class Potential():
                 else:
                     CO2_atom_b = rowCO2_b
                     LJ_pot_all += self.LJ_each(CO2_atom_a, CO2_atom_b)
-        return LJ_pot_all / self.R
+        return LJ_pot_all * self.R
+
+
+
+    # LJ potential loop for all molecules pairs of CO2 and CO2
+    def charge_CO2_CO2(self):
+        charge_pot_all = 0
+        # for loop (CO2 molecules)
+        for indexCO2_a, rowCO2_a in self.pos_CO2.iterrows():
+            CO2_atom_a = rowCO2_a
+            # for loop (CO2 molecules)
+            for indexCO2_b, rowCO2_b in self.pos_CO2.iterrows():
+                # atoms in the same molecule should be excluded
+                if (rowCO2_a['number']-1)//self.num_atom_in_molecule==(rowCO2_b['number']-1)//self.num_atom_in_molecule:
+                    continue
+                else:
+                    CO2_atom_b = rowCO2_b
+                    charge_pot_all += self.charge_each(CO2_atom_a, CO2_atom_b)
+        return charge_pot_all * self.k_charge
 
 
     # show the summation of potential
@@ -152,10 +192,17 @@ class Potential():
         LJ_CO2 = self.LJ_CO2_CO2()
         LJ_frame = self.LJ_CO2_frame()
         print('LJ potential between framework and CO2 molecules  :   ', LJ_CO2  , 'kJ/mol')
-        print('LJ potential between CO2 and CO2molecules         :   ', LJ_frame, 'kJ/mol')
+        print('LJ potential between CO2 and CO2 molecules        :   ', LJ_frame, 'kJ/mol')
         print('LJ potential overall                              :   ', LJ_CO2 + LJ_frame, 'kJ/mol')
 
+        charge_CO2 = self.charge_CO2_CO2()
+        charge_frame = self.charge_CO2_frame()
+        print('electric pot between framework and CO2 molecules  :   ', charge_CO2  , 'kJ/mol')
+        print('electric pot between CO2 and CO2 molecules        :   ', charge_frame, 'kJ/mol')
+        print('electric pot overall                              :   ', charge_CO2 + charge_frame, 'kJ/mol')
 
+
+    #Auxually
     # LJ potential curve
     def LJ_graph(self):
         atom_A = 'Cr1'
@@ -174,13 +221,13 @@ class Potential():
         ax_pot.set_xlabel('distance  A')
         ax_pot.set_ylabel('potential  kJ/mol')
         ax_pot.legend()
-
         plt.show()
+
 
 def main():
     mil101 = Potential()
     #mil101.LJ_graph()
     mil101.potential()
-    
+
 if __name__=='__main__':
     main()
