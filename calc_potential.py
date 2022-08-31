@@ -9,19 +9,20 @@ if you want to do this calculation for other molecules like H2O, you should chan
 """
 class Potential():
     def __init__(self):
-        self.avogadro = 6.02214e23  # /mol
-        self.R = 8.31446261815324 / 1000  # kJ/K/mol
-        self.k_charge = 8.987552e9 * (1.60217733e-19) * (1.60217733e-19) * 1e10 * self.avogadro /1000  # kJ/mol
-
-        self.num_atom_in_molecule = 3
-
-        self.CO2_file = './force_field/CO2_example.pdb'
+        # to be specified for each case
+        self.CO2_file = './force_field/CO2.pdb'
         self.frame_file = './force_field/MIL-101_all.pdb'
+        self.num_atom_in_molecule = 3
+        self.cutoff = 12 # A, only for VDW interaction
+        
+        # constant and data reader
+        self.cutoff_2 = self.cutoff**2
         self.__import_position()
         self.__import_potential()
-
-        self.cutoff = 12 # A
-        self.cutoff_2 = self.cutoff**2
+        self.avogadro = 6.02214e23  # /mol
+        self.num_CO2 = len(self.pos_CO2) / self.num_atom_in_molecule
+        self.R = 8.31446261815324 / 1000  /self.num_CO2 # kJ/K/mol
+        self.k_charge = 8.987552e9 * (1.60217733e-19) * (1.60217733e-19) * 1e10 * self.avogadro /1000 /self.num_CO2 # kJ/mol
         self.mol_amount = self.num_CO2 / self.avogadro
 
 
@@ -30,7 +31,6 @@ class Potential():
     def __import_position(self):
         f_cols=['A','number','atom','M','x','y','z','b','c','atom spec']
         self.pos_CO2 = pd.read_csv(self.CO2_file, delim_whitespace = True,header=None,names=f_cols)
-        self.num_CO2 = len(self.pos_CO2) / self.num_atom_in_molecule
         self.pos_frame = pd.read_csv(self.frame_file, delim_whitespace = True, skiprows=1, header=None,names=f_cols)[:-1]
 
 
@@ -43,7 +43,7 @@ class Potential():
         self.__modify_name()
 
 
-    # the name of atom in pdb file and force field file are differnt, modify them
+    # the name of atom in pdb file and force_field file should be the same
     def __modify_name(self):
         self.LJ_pot = self.LJ_pot.replace('O_co2','O')
         self.LJ_pot = self.LJ_pot.replace('C_co2','C')
@@ -51,13 +51,11 @@ class Potential():
         self.charges = self.charges.replace('C_co2','C')
 
 
-
     # take out LJ params for each atom
     def params_LJ(self, atom_name):
         epsilon = float(self.LJ_pot[self.LJ_pot['atom_type']==atom_name]['epsilon']) # ε / kb
         sigma = float(self.LJ_pot[self.LJ_pot['atom_type']==atom_name]['sigma'])
         return epsilon, sigma
-
 
     # take out the charges params for each atom
     def params_charge(self, atom_name):
@@ -73,8 +71,7 @@ class Potential():
         if (dx <= self.cutoff) and (dy <= self.cutoff) and (dz <= self.cutoff):
             return dx**2 + dy**2 + dz**2
         else:
-            return 1000000
-            # just to calculate fast, 
+            return 1000000  # just to calculate fast, 
 
     # distance between molecules powers to 2
     def distance(self, molA, molB):
@@ -104,21 +101,18 @@ class Potential():
         else:
             return 0
 
-
     # calculate LJ potential function from distance
     def charge_function(self, r, qA, qB):
         pot = qA * qB / r
         return pot
         
         
-
     # LJ potential calculation for each pairs
     def LJ_each(self, molA, molB):
         eps, sig = self.lorentz_berthelot(molA, molB)
         r2_ = self.distance_2(molA, molB)
         pot_each = self.LJ_function(r2_, eps, sig)
         return pot_each
-
 
     # electric potential calculation for each pairs
     def charge_each(self, molA, molB):
@@ -140,7 +134,6 @@ class Potential():
                 frame_atom = rowFrame
                 LJ_pot_all += self.LJ_each(CO2_atom, frame_atom)
         return LJ_pot_all * self.R
-
 
     # electric potential loop for all molecules pairs of frame and CO2
     def charge_CO2_frame(self):
@@ -172,8 +165,6 @@ class Potential():
                     LJ_pot_all += self.LJ_each(CO2_atom_a, CO2_atom_b)
         return LJ_pot_all * self.R
 
-
-
     # LJ potential loop for all molecules pairs of CO2 and CO2
     def charge_CO2_CO2(self):
         charge_pot_all = 0
@@ -195,9 +186,9 @@ class Potential():
     def potential(self):
         LJ_CO2 = self.LJ_CO2_CO2()
         LJ_frame = self.LJ_CO2_frame()
-        print('LJ potential between framework and CO2 molecules  :   ', LJ_frame  , 'kJ/mol')
-        print('LJ potential between CO2 and CO2 molecules        :   ', LJ_CO2, 'kJ/mol')
-        print('LJ potential overall                              :   ', LJ_CO2 + LJ_frame, 'kJ/mol\n')
+        print('VDW potential between framework and CO2 molecules  :   ', LJ_frame  , 'kJ/mol')
+        print('VDW potential between CO2 and CO2 molecules        :   ', LJ_CO2, 'kJ/mol')
+        print('VDW' potential overall                              :   ', LJ_CO2 + LJ_frame, 'kJ/mol\n')
 
         charge_CO2 = self.charge_CO2_CO2()
         charge_frame = self.charge_CO2_frame()
