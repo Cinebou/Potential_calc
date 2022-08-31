@@ -188,13 +188,15 @@ class Potential():
         LJ_frame = self.LJ_CO2_frame()
         print('VDW potential between framework and CO2 molecules  :   ', LJ_frame  , 'kJ/mol')
         print('VDW potential between CO2 and CO2 molecules        :   ', LJ_CO2, 'kJ/mol')
-        print('VDW' potential overall                              :   ', LJ_CO2 + LJ_frame, 'kJ/mol\n')
+        print('VDW potential overall                              :   ', LJ_CO2 + LJ_frame, 'kJ/mol\n')
 
         charge_CO2 = self.charge_CO2_CO2()
         charge_frame = self.charge_CO2_frame()
         print('electric pot between framework and CO2 molecules  :   ', charge_frame  , 'kJ/mol')
         print('electric pot between CO2 and CO2 molecules        :   ', charge_CO2, 'kJ/mol')
-        print('electric pot overall                              :   ', charge_CO2 + charge_frame, 'kJ/mol')
+        print('electric pot overall                              :   ', charge_CO2 + charge_frame, 'kJ/mol\n')
+
+        print('total heat of adsorption                          :   ',LJ_CO2 + LJ_frame + charge_CO2 + charge_frame, 'kJ/mol\n')
 
 
     #Auxually
