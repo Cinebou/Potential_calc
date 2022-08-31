@@ -11,7 +11,7 @@ class Potential():
     def __init__(self):
         self.avogadro = 6.02214e23  # /mol
         self.R = 8.31446261815324 / 1000  # kJ/K/mol
-        self.k_charge = (1.60217733e-19)**2*1e10*8.987552e9 * self.avogadro /1000  # kJ/mol * Å/C^2
+        self.k_charge = 8.987552e9 * (1.60217733e-19) * (1.60217733e-19) * 1e10 * self.avogadro /1000  # kJ/mol
 
         self.num_atom_in_molecule = 3
 
@@ -76,6 +76,14 @@ class Potential():
             return 1000000
             # just to calculate fast, 
 
+    # distance between molecules powers to 2
+    def distance(self, molA, molB):
+        dx = molA['x'] - molB['x']
+        dy = molA['y'] - molB['y']
+        dz = molA['z'] - molB['z']
+        r = sqrt(dx**2 + dy**2 + dz**2)
+        return r
+
     
     # Lorentz-Berthelot mixing rules
     def lorentz_berthelot(self, atom_a, atom_b):
@@ -98,14 +106,10 @@ class Potential():
 
 
     # calculate LJ potential function from distance
-    def charge_function(self, r2, qA, qB):
-        if (r2 <= self.cutoff_2):
-            r = sqrt(r2)
-            pot = -self.k_charge * qA * qB / r
-            return pot
-        # when the atom pairs are too far away, retrun potential zero
-        else:
-            return 0
+    def charge_function(self, r, qA, qB):
+        pot = qA * qB / r
+        return pot
+        
         
 
     # LJ potential calculation for each pairs
@@ -118,10 +122,10 @@ class Potential():
 
     # electric potential calculation for each pairs
     def charge_each(self, molA, molB):
-        r2_ = self.distance_2(molA, molB)
+        r = self.distance(molA, molB)
         qA = self.params_charge(molA['atom'])
         qB = self.params_charge(molB['atom'])
-        charge_each = self.charge_function(r2_, qA, qB)
+        charge_each = self.charge_function(r, qA, qB)
         return charge_each
 
 
@@ -191,14 +195,14 @@ class Potential():
     def potential(self):
         LJ_CO2 = self.LJ_CO2_CO2()
         LJ_frame = self.LJ_CO2_frame()
-        print('LJ potential between framework and CO2 molecules  :   ', LJ_CO2  , 'kJ/mol')
-        print('LJ potential between CO2 and CO2 molecules        :   ', LJ_frame, 'kJ/mol')
-        print('LJ potential overall                              :   ', LJ_CO2 + LJ_frame, 'kJ/mol')
+        print('LJ potential between framework and CO2 molecules  :   ', LJ_frame  , 'kJ/mol')
+        print('LJ potential between CO2 and CO2 molecules        :   ', LJ_CO2, 'kJ/mol')
+        print('LJ potential overall                              :   ', LJ_CO2 + LJ_frame, 'kJ/mol\n')
 
         charge_CO2 = self.charge_CO2_CO2()
         charge_frame = self.charge_CO2_frame()
-        print('electric pot between framework and CO2 molecules  :   ', charge_CO2  , 'kJ/mol')
-        print('electric pot between CO2 and CO2 molecules        :   ', charge_frame, 'kJ/mol')
+        print('electric pot between framework and CO2 molecules  :   ', charge_frame  , 'kJ/mol')
+        print('electric pot between CO2 and CO2 molecules        :   ', charge_CO2, 'kJ/mol')
         print('electric pot overall                              :   ', charge_CO2 + charge_frame, 'kJ/mol')
 
 
@@ -223,10 +227,30 @@ class Potential():
         ax_pot.legend()
         plt.show()
 
+    
+    # electric potential curve
+    def charge_graph(self):
+        atom_A = 'Cr1'
+        atom_B = 'F1'
+        qa = self.params_charge(atom_A)
+        qb = self.params_charge(atom_B)
+
+        r_list = np.linspace(2.5, self.cutoff, 100)
+        pot_list = [self.charge_function(r, qa, qb)*self.k_charge for r in r_list]
+
+        fig_pot = plt.figure()
+        ax_pot = fig_pot.add_subplot(111)
+        ax_pot.plot(r_list, pot_list, label=atom_A+'-'+atom_B)
+        ax_pot.set_xlabel('distance  A')
+        ax_pot.set_ylabel('potential  kJ/mol')
+        ax_pot.legend()
+        plt.show()
+
 
 def main():
     mil101 = Potential()
     #mil101.LJ_graph()
+    #mil101.charge_graph()
     mil101.potential()
 
 if __name__=='__main__':

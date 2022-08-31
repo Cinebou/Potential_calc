@@ -17,7 +17,8 @@ python calc_potential.py
 6. Save as pdb files.
 
 
-### Attention
+## Attention
 1. In the CO2 pdb files, remove the header. Only atom line can be accepted.
 2. Electric potential is not calculated based on Ewald method.
 3. If you want to run this calculation with different gas molecule, you need to change the function '__modify_name()'
+4. The periodic boundary codition is not considered. (Later)
