@@ -3,15 +3,27 @@ from math import sqrt
 import matplotlib.pyplot as plt
 import numpy as np
 
+
+
+def main():
+    CO2_file = './force_field/CO2.pdb'
+    frame_file = './force_field/MIL-101_all.pdb'
+    mil101 = Potential(CO2_file, frame_file)
+    #mil101.LJ_graph()
+    #mil101.charge_graph()
+    mil101.potential()
+    
+
+
 """
 LJ potential calculation for CO2 adsorption
 if you want to do this calculation for other molecules like H2O, you should change the '__modify_name(self)'
 """
-class Potential():
-    def __init__(self):
+class Potential(object):
+    def __init__(self, CO2_file, frame_file):
         # to be specified for each case
-        self.CO2_file = './force_field/CO2.pdb'
-        self.frame_file = './force_field/MIL-101_all.pdb'
+        self.CO2_file = CO2_file
+        self.frame_file = frame_file
         self.num_atom_in_molecule = 3
         self.cutoff = 12 # A, only for VDW interaction
         
@@ -19,19 +31,14 @@ class Potential():
         self.cutoff_2 = self.cutoff**2
         self.__import_position()
         self.__import_potential()
-        self.avogadro = 6.02214e23  # /mol
-        self.num_CO2 = len(self.pos_CO2) / self.num_atom_in_molecule
-        self.R = 8.31446261815324 / 1000  /self.num_CO2 # kJ/K/mol
-        self.k_charge = 8.987552e9 * (1.60217733e-19) * (1.60217733e-19) * 1e10 * self.avogadro /1000 /self.num_CO2 # kJ/mol
-        self.mol_amount = self.num_CO2 / self.avogadro
-
+        self.init_const()
 
 
     # read the pdb file
     def __import_position(self):
-        f_cols=['A','number','atom','M','x','y','z','b','c','atom spec']
-        self.pos_CO2 = pd.read_csv(self.CO2_file, delim_whitespace = True,header=None,names=f_cols)
-        self.pos_frame = pd.read_csv(self.frame_file, delim_whitespace = True, skiprows=1, header=None,names=f_cols)[:-1]
+        self.f_cols=['A','number','atom','M','x','y','z','b','c','atom spec']
+        self.pos_CO2 = pd.read_csv(self.CO2_file, delim_whitespace = True,header=None,names=self.f_cols)
+        self.pos_frame = pd.read_csv(self.frame_file, delim_whitespace = True, skiprows=1, header=None,names=self.f_cols)[:-1]
 
 
     # read the parameters for potential functions
@@ -49,6 +56,14 @@ class Potential():
         self.LJ_pot = self.LJ_pot.replace('C_co2','C')
         self.charges = self.charges.replace('O_co2','O')
         self.charges = self.charges.replace('C_co2','C')
+    
+    # constant as a function of number of CO2 molecule
+    def init_const(self):
+        self.avogadro = 6.02214e23  # /mol
+        self.num_CO2 = len(self.pos_CO2) / self.num_atom_in_molecule
+        self.R = 8.31446261815324 / 1000  /self.num_CO2 # kJ/K/mol
+        self.k_charge = 8.987552e9 * (1.60217733e-19) * (1.60217733e-19) * 1e10 * self.avogadro /1000 /self.num_CO2 # kJ/mol
+        self.mol_amount = self.num_CO2 / self.avogadro
 
 
     # take out LJ params for each atom
@@ -197,7 +212,7 @@ class Potential():
         print('electric pot overall                              :   ', charge_CO2 + charge_frame, 'kJ/mol\n')
 
         print('total heat of adsorption                          :   ',LJ_CO2 + LJ_frame + charge_CO2 + charge_frame, 'kJ/mol\n')
-
+        return 0
 
     #Auxually
     # LJ potential curve
@@ -219,6 +234,7 @@ class Potential():
         ax_pot.set_ylabel('potential  kJ/mol')
         ax_pot.legend()
         plt.show()
+        return 0
 
     
     # electric potential curve
@@ -238,13 +254,8 @@ class Potential():
         ax_pot.set_ylabel('potential  kJ/mol')
         ax_pot.legend()
         plt.show()
+        return 0
 
-
-def main():
-    mil101 = Potential()
-    #mil101.LJ_graph()
-    #mil101.charge_graph()
-    mil101.potential()
 
 if __name__=='__main__':
     main()

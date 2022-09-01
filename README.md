@@ -3,10 +3,17 @@ You can calculate the Coulombic and VDW potential of each specific molecule in t
 Import your force field ('pseudo_atoms.def', 'force_fieldmixing_rules.def') to the sub derectory.
 Then, prepare the CO2 pdb file and framework pdb file as shown below.
 
-Finally, you can run the calucaltion.
+Finally, you can run the calucaltion for all molecules in the system.
 '''
-python calc_potential.py
+python calc_pot_total.py
 '''
+
+Or, if you want to calculate for each molecule, you can specify them and calculte the potential for each of them.
+'''
+python calc_pot_each.py
+'''
+You can find the molecules you are intereted in from VMD and record their position. From the positions, you can find the specific number of the atom in PDB file. Then run this code with the number.
+
 
 # How to get framework pdb file with atom numbering
 1. Install Pymol
