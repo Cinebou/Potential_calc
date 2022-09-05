@@ -6,18 +6,25 @@ from calc_pot_total import Potential
 
 
 def main():
-    CO2_file = './force_field/CO2.pdb'
+    CO2_file = './force_field/co2_3bar.pdb'
     frame_file = './force_field/MIL-101_all.pdb'
 
     # specific atom number in pdb file
     # it should be the whole molecule, which is the set of three atoms
-    specified_atoms = [4,5,6]
+    
+    c_atoms = [95]
+    specified_atoms = C_to_O(c_atoms)
 
     pot = Potential_each(CO2_file, frame_file, specified_atoms)
     pot.potential_each()
     return 0
     
 
+def C_to_O(C_list):
+    co2_list = []
+    for c in C_list:
+        co2_list += [c-1, c, c+1]
+    return co2_list
 
 
 class Potential_each(Potential):
