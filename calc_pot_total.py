@@ -2,44 +2,67 @@ import pandas as pd
 from math import sqrt
 import matplotlib.pyplot as plt
 import numpy as np
+from math import radians, cos, sin
+from os import path, mkdir
+import log_output
 
+cell_L_x = 62.840 
+cell_L_y = 62.840 
+cell_L_z = 62.840 
 
+cell_angle_a = radians(60)	
+cell_angle_b = radians(60)
+cell_angle_c = radians(60)
+
+global ax, bx, by, cx, cy, cz, file_name
+ax = cell_L_x
+bx = cell_L_y*cos(cell_angle_c)
+by = cell_L_y*sin(cell_angle_c)
+cx = cell_L_z*cos(cell_angle_b)
+cy = cell_L_z*(cos(cell_angle_a)-cos(cell_angle_b)*cos(cell_angle_c))/sin(cell_angle_c)
+cz = sqrt(cell_L_z**2 - cx**2 - cy**2)
+
+if not path.exists('./Results'):
+    mkdir('./Results')
 
 def main():
-    CO2_file = './force_field/CO2.pdb'
+    temp_pres = '298.15_100000'
+    CO2_file = './force_field/VMD/'+temp_pres+'.pdb'
     frame_file = './force_field/MIL-101_all.pdb'
-    mil101 = Potential(CO2_file, frame_file)
+    Results_file_name = './Results/'+temp_pres+'.csv'
+    mil101 = Potential(CO2_file, frame_file, Results_file_name)
     #mil101.LJ_graph()
     #mil101.charge_graph()
-    mil101.potential()
+    mil101.pot_for_all()
     
-
-
 """
 LJ potential calculation for CO2 adsorption
-if you want to do this calculation for other molecules like H2O, you should change the '__modify_name(self)'
 """
 class Potential(object):
-    def __init__(self, CO2_file, frame_file):
+    def __init__(self, CO2_file, frame_file, res_file):
         # to be specified for each case
         self.CO2_file = CO2_file
         self.frame_file = frame_file
+        self.res_file = res_file
         self.num_atom_in_molecule = 3
         self.cutoff = 12 # A, only for VDW interaction
+        self.surface_depth = self.cutoff
         
         # constant and data reader
         self.cutoff_2 = self.cutoff**2
         self.__import_position()
         self.__import_potential()
         self.init_const()
+        print('Finish reading all the positions from files')
 
 
     # read the pdb file
     def __import_position(self):
         self.f_cols=['A','number','atom','M','x','y','z','b','c','atom spec']
         self.pos_CO2 = pd.read_csv(self.CO2_file, delim_whitespace = True,header=None,names=self.f_cols)
-        self.pos_frame = pd.read_csv(self.frame_file, delim_whitespace = True, skiprows=1, header=None,names=self.f_cols)[:-1]
-
+        self.pos_frame_or = pd.read_csv(self.frame_file, delim_whitespace = True, skiprows=1, header=None,names=self.f_cols)[:-1]
+        self.pos_CO2_PBD = self.__repro_pbd(self.pos_CO2)
+        self.pos_frame = self.__repro_pbd(self.pos_frame_or)
 
     # read the parameters for potential functions
     def __import_potential(self):
@@ -56,14 +79,55 @@ class Potential(object):
         self.LJ_pot = self.LJ_pot.replace('C_co2','C')
         self.charges = self.charges.replace('O_co2','O')
         self.charges = self.charges.replace('C_co2','C')
+
+    
+    # reproduce the position of the atoms into PBC
+    def __repro_pbd(self, pos):
+        pos_num = len(pos)
+        for k in range(pos_num):
+            for x in range(3):
+                for y in range(3):
+                    for z in range(3):
+                        if x==1 & y==1 & z==1:
+                            continue
+                        imT = pos.iloc[k].copy(deep=True)
+                        imT['x'] += cx*(z-1) + bx*(y-1) + ax*(x-1)
+                        imT['y'] += cy*(z-1) + by*(y-1)
+                        imT['z'] += cz*(z-1)
+
+                        # only the surface of the surrounding cell can be listed
+                        if self.__judge_surface(imT['x'], imT['y'], imT['z']):
+                            pos = pos.append(imT)
+        return pos
+
+
+    # judge the surrounding surface within the distance of cutoff radius
+    def __judge_surface(self, x, y, z):
+        # surface depth is extended in the virtical direction of the wall 
+        x_min_surface = (bx*cz*y-(bx*cy-by*cx)*z)/by/cz - self.surface_depth*10.0
+        x_max_surface = x_min_surface + ax + self.surface_depth*10.0
+     
+        y_min_surface = z*cy/cz - self.surface_depth*10.0
+        y_max_surface = y_min_surface + by + self.surface_depth*10.0
+
+        # z surface is pararell to the original xyz coordinates 
+        z_min_surface = 0 - self.surface_depth
+        z_max_surface = cz + self.surface_depth
+        
+        if (x_min_surface <= x <= x_max_surface) & (y_min_surface <= y <= y_max_surface) & (z_min_surface <= z <= z_max_surface):
+            return True
+        else:
+            return False
+        
     
     # constant as a function of number of CO2 molecule
     def init_const(self):
         self.avogadro = 6.02214e23  # /mol
         self.num_CO2 = len(self.pos_CO2) / self.num_atom_in_molecule
-        self.R = 8.31446261815324 / 1000  /self.num_CO2 # kJ/K/mol
-        self.k_charge = 8.987552e9 * (1.60217733e-19) * (1.60217733e-19) * 1e10 * self.avogadro /1000 /self.num_CO2 # kJ/mol
+        self.R = -8.31446261815324 / 1000  # kJ/K/mol
+        self.k_charge = -8.987552e9 * (1.60217733e-19) * (1.60217733e-19) * 1e10 * self.avogadro /1000 # kJ/mol
         self.mol_amount = self.num_CO2 / self.avogadro
+
 
 
     # take out LJ params for each atom
@@ -83,19 +147,7 @@ class Potential(object):
         dx = molA['x'] - molB['x']
         dy = molA['y'] - molB['y']
         dz = molA['z'] - molB['z']
-        if (dx <= self.cutoff) and (dy <= self.cutoff) and (dz <= self.cutoff):
-            return dx**2 + dy**2 + dz**2
-        else:
-            return 1000000  # just to calculate fast, 
-
-    # distance between molecules powers to 2
-    def distance(self, molA, molB):
-        dx = molA['x'] - molB['x']
-        dy = molA['y'] - molB['y']
-        dz = molA['z'] - molB['z']
-        r = sqrt(dx**2 + dy**2 + dz**2)
-        return r
-
+        return dx**2 + dy**2 + dz**2
     
     # Lorentz-Berthelot mixing rules
     def lorentz_berthelot(self, atom_a, atom_b):
@@ -108,110 +160,71 @@ class Potential(object):
     
     # calculate LJ potential function from distance
     def LJ_function(self, r2, epsilon, sigma):
-        if (r2 <= self.cutoff_2):
-            r_s_6 = (sigma**2/r2)**3
-            pot = 4 * epsilon * (r_s_6**2 - r_s_6)
-            return pot
-        # when the atom pairs are too far away, retrun potential zero
-        else:
-            return 0
-
-    # calculate LJ potential function from distance
-    def charge_function(self, r, qA, qB):
-        pot = qA * qB / r
+        r_s_6 = (sigma**2/r2)**3
+        pot = 4 * epsilon * (r_s_6**2 - r_s_6)
         return pot
         
+
+    # calculate LJ potential function from distance
+    def charge_function(self, r2, qA, qB):
+        pot = qA * qB / sqrt(r2)
+        return pot
         
     # LJ potential calculation for each pairs
-    def LJ_each(self, molA, molB):
+    def LJ_each(self, molA, molB,r2):
         eps, sig = self.lorentz_berthelot(molA, molB)
-        r2_ = self.distance_2(molA, molB)
-        pot_each = self.LJ_function(r2_, eps, sig)
+        pot_each = self.LJ_function(r2, eps, sig)
         return pot_each
 
     # electric potential calculation for each pairs
-    def charge_each(self, molA, molB):
-        r = self.distance(molA, molB)
+    def charge_each(self, molA, molB,r2):
         qA = self.params_charge(molA['atom'])
         qB = self.params_charge(molB['atom'])
-        charge_each = self.charge_function(r, qA, qB)
-        return charge_each
+        charge = self.charge_function(r2, qA, qB)
+        return charge
+        
+    # pot for each atoms
+    def pot_for_all(self):
+        # prepare results file
+        res_potential = pd.DataFrame(columns=['atom_num','x','y','z', 'LJ_CO2', 'LJ_frame', 'Elec_CO2', 'Elec_frame', 'Total_pot'])
+        res_potential.to_csv(self.res_file) 
 
-
-    # LJ potential loop for all molecules pairs of frame and CO2
-    def LJ_CO2_frame(self):
-        LJ_pot_all = 0
         # for loop (CO2 molecules)
         for indexCO2, rowCO2 in self.pos_CO2.iterrows():
-            CO2_atom = rowCO2
-            # for loop (frameworks)
+            LJ_frame = 0
+            Elec_frame = 0
+
+            # frame iteration
             for indexFrame, rowFrame in self.pos_frame.iterrows():
-                frame_atom = rowFrame
-                LJ_pot_all += self.LJ_each(CO2_atom, frame_atom)
-        return LJ_pot_all * self.R
-
-    # electric potential loop for all molecules pairs of frame and CO2
-    def charge_CO2_frame(self):
-        charge_pot_all = 0
-        # for loop (CO2 molecules)
-        for indexCO2, rowCO2 in self.pos_CO2.iterrows():
-            CO2_atom = rowCO2
-            # for loop (frameworks)
-            for indexFrame, rowFrame in self.pos_frame.iterrows():
-                frame_atom = rowFrame
-                charge_pot_all += self.charge_each(CO2_atom, frame_atom)
-        return charge_pot_all * self.k_charge
-
-
-
-    # LJ potential loop for all molecules pairs of CO2 and CO2
-    def LJ_CO2_CO2(self):
-        LJ_pot_all = 0
-        # for loop (CO2 molecules)
-        for indexCO2_a, rowCO2_a in self.pos_CO2.iterrows():
-            CO2_atom_a = rowCO2_a
-            # for loop (CO2 molecules)
-            for indexCO2_b, rowCO2_b in self.pos_CO2.iterrows():
+                r2 = self.distance_2(rowCO2, rowFrame)
+                Elec_frame += self.charge_each(rowCO2, rowFrame,r2)
+                if r2 <= self.cutoff_2:
+                    LJ_frame += self.LJ_each(rowCO2, rowFrame,r2)
+            
+            Elec_CO2 = 0
+            LJ_CO2 = 0
+            # CO2 iteration
+            for indexCO2_b, rowCO2_b in self.pos_CO2_PBD.iterrows():
+                r2 = self.distance_2(rowCO2, rowCO2_b)
                 # atoms in the same molecule should be excluded
-                if (rowCO2_a['number']-1)//self.num_atom_in_molecule==(rowCO2_b['number']-1)//self.num_atom_in_molecule:
+                if (rowCO2['number']-1)//self.num_atom_in_molecule==(rowCO2_b['number']-1)//self.num_atom_in_molecule:
                     continue
-                else:
-                    CO2_atom_b = rowCO2_b
-                    LJ_pot_all += self.LJ_each(CO2_atom_a, CO2_atom_b)
-        return LJ_pot_all * self.R
+                Elec_CO2 += self.charge_each(rowCO2, rowCO2_b,r2)
+                if r2 <= self.cutoff_2:
+                    LJ_CO2 += self.LJ_each(rowCO2, rowCO2_b,r2)
 
-    # LJ potential loop for all molecules pairs of CO2 and CO2
-    def charge_CO2_CO2(self):
-        charge_pot_all = 0
-        # for loop (CO2 molecules)
-        for indexCO2_a, rowCO2_a in self.pos_CO2.iterrows():
-            CO2_atom_a = rowCO2_a
-            # for loop (CO2 molecules)
-            for indexCO2_b, rowCO2_b in self.pos_CO2.iterrows():
-                # atoms in the same molecule should be excluded
-                if (rowCO2_a['number']-1)//self.num_atom_in_molecule==(rowCO2_b['number']-1)//self.num_atom_in_molecule:
-                    continue
-                else:
-                    CO2_atom_b = rowCO2_b
-                    charge_pot_all += self.charge_each(CO2_atom_a, CO2_atom_b)
-        return charge_pot_all * self.k_charge
+            # const for potential
+            LJ_CO2 = LJ_CO2 * self.R
+            LJ_frame = LJ_frame * self.R
+            Elec_CO2 = Elec_CO2 * self.k_charge
+            Elec_frame = Elec_frame * self.k_charge
+            Total_pot = LJ_CO2 + LJ_frame + Elec_CO2 + Elec_frame
 
+            # write_all results
+            res_potential = pd.DataFrame([rowCO2['number'], rowCO2['x'], rowCO2['y'], rowCO2['z'], LJ_CO2, LJ_frame, Elec_CO2, Elec_frame, Total_pot]).T
+            res_potential.to_csv(self.res_file, mode='a', header=False)
 
-    # show the summation of potential
-    def potential(self):
-        LJ_CO2 = self.LJ_CO2_CO2()
-        LJ_frame = self.LJ_CO2_frame()
-        print('VDW potential between framework and CO2 molecules  :   ', LJ_frame  , 'kJ/mol')
-        print('VDW potential between CO2 and CO2 molecules        :   ', LJ_CO2, 'kJ/mol')
-        print('VDW potential overall                              :   ', LJ_CO2 + LJ_frame, 'kJ/mol\n')
-
-        charge_CO2 = self.charge_CO2_CO2()
-        charge_frame = self.charge_CO2_frame()
-        print('electric pot between framework and CO2 molecules  :   ', charge_frame  , 'kJ/mol')
-        print('electric pot between CO2 and CO2 molecules        :   ', charge_CO2, 'kJ/mol')
-        print('electric pot overall                              :   ', charge_CO2 + charge_frame, 'kJ/mol\n')
-
-        print('total heat of adsorption                          :   ',LJ_CO2 + LJ_frame + charge_CO2 + charge_frame, 'kJ/mol\n')
+            print('calculation going...  : ',int(rowCO2['number']/len(self.pos_CO2)*100), '  %')
         return 0
 
     #Auxually
@@ -230,6 +243,7 @@ class Potential(object):
         fig_pot = plt.figure()
         ax_pot = fig_pot.add_subplot(111)
         ax_pot.plot(r_list, pot_list, label=atom_A+'-'+atom_B)
+        ax_pot.set_title('VDW')
         ax_pot.set_xlabel('distance  A')
         ax_pot.set_ylabel('potential  kJ/mol')
         ax_pot.legend()
@@ -245,17 +259,18 @@ class Potential(object):
         qb = self.params_charge(atom_B)
 
         r_list = np.linspace(2.5, self.cutoff, 100)
-        pot_list = [self.charge_function(r, qa, qb)*self.k_charge for r in r_list]
+        pot_list = [self.charge_function(r**2, qa, qb)*self.k_charge for r in r_list]
 
         fig_pot = plt.figure()
         ax_pot = fig_pot.add_subplot(111)
         ax_pot.plot(r_list, pot_list, label=atom_A+'-'+atom_B)
+        ax_pot.set_title('charge')
         ax_pot.set_xlabel('distance  A')
         ax_pot.set_ylabel('potential  kJ/mol')
         ax_pot.legend()
         plt.show()
         return 0
 
-
+    
 if __name__=='__main__':
     main()

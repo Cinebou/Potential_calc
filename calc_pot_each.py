@@ -1,21 +1,29 @@
 import pandas as pd
-from math import sqrt
+from math import sqrt, ceil
 import matplotlib.pyplot as plt
 import numpy as np
 from calc_pot_total import Potential
+import log_output
 
 
 def main():
-    CO2_file = './force_field/co2_3bar.pdb'
+    CO2_file = './force_field/VMD/298.15_100000.pdb'
     frame_file = './force_field/MIL-101_all.pdb'
-
+    Results_file_name = './Results/example.csv'
     # specific atom number in pdb file
     # it should be the whole molecule, which is the set of three atoms
-    
-    c_atoms = [95]
-    specified_atoms = C_to_O(c_atoms)
 
-    pot = Potential_each(CO2_file, frame_file, specified_atoms)
+    # 1 bar, 298.15 K, MIL-101
+    #c_atoms = [176]  # 1 molecules in ST
+    #c_atoms = [182]  # 1 molecules in ST
+    #c_atoms = [269, 227]  # 2 molecules in ST
+    #c_atoms = [275, 131]  # 2 molecules in ST
+    c_atoms = [104, 140, 137]  # 3 molecules in ST
+
+    specified_atoms = C_to_O(c_atoms)
+    
+    #specified_atoms = [7,8,9]
+    pot = Potential_each(CO2_file, frame_file, specified_atoms, Results_file_name)
     pot.potential_each()
     return 0
     
@@ -28,8 +36,8 @@ def C_to_O(C_list):
 
 
 class Potential_each(Potential):
-    def __init__(self,CO2_file_, frame_file_, specified_atom_):
-        super().__init__(CO2_file_, frame_file_)
+    def __init__(self,CO2_file_, frame_file_, specified_atom_, Results_file_name_):
+        super().__init__(CO2_file_, frame_file_,Results_file_name_)
         self.co2_pickup(specified_atom_)
 
     # for calc_each_pot
@@ -59,10 +67,15 @@ class Potential_each(Potential):
         # for loop (CO2 molecules)
         for indexCO2, rowCO2 in self.target_CO2.iterrows():
             CO2_atom = rowCO2
+
             # for loop (frameworks)
             for indexFrame, rowFrame in self.pos_frame.iterrows():
                 frame_atom = rowFrame
-                LJ_pot_all += self.LJ_each(CO2_atom, frame_atom)
+                r2 = self.distance_2(CO2_atom, frame_atom)
+                if r2 <= self.cutoff_2:
+                    LJ_pot_all += self.LJ_each(CO2_atom, frame_atom, r2)
+
+                    log_output.log_any_msg("{} : {}".format(self.LJ_each(rowCO2, rowFrame,r2), r2))
         return LJ_pot_all * self.R
 
     # electric potential loop for all molecules pairs of frame and CO2
@@ -74,7 +87,8 @@ class Potential_each(Potential):
             # for loop (frameworks)
             for indexFrame, rowFrame in self.pos_frame.iterrows():
                 frame_atom = rowFrame
-                charge_pot_all += self.charge_each(CO2_atom, frame_atom)
+                r2 = self.distance_2(CO2_atom, frame_atom)
+                charge_pot_all += self.charge_each(CO2_atom, frame_atom, r2)
         return charge_pot_all * self.k_charge
 
 
@@ -92,7 +106,9 @@ class Potential_each(Potential):
                     continue
                 else:
                     CO2_atom_b = rowCO2_b
-                    LJ_pot_all += self.LJ_each(CO2_atom_a, CO2_atom_b)
+                    r2 = self.distance_2(CO2_atom_a, CO2_atom_b)
+                    if r2 <= self.cutoff_2:
+                        LJ_pot_all += self.LJ_each(CO2_atom_a, CO2_atom_b, r2)
         return LJ_pot_all * self.R
 
     # LJ potential loop for all molecules pairs of CO2 and CO2
@@ -108,7 +124,8 @@ class Potential_each(Potential):
                     continue
                 else:
                     CO2_atom_b = rowCO2_b
-                    charge_pot_all += self.charge_each(CO2_atom_a, CO2_atom_b)
+                    r2 = self.distance_2(CO2_atom_a, CO2_atom_b)
+                    charge_pot_all += self.charge_each(CO2_atom_a, CO2_atom_b, r2)
         return charge_pot_all * self.k_charge
 
     

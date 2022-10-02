@@ -1,4 +1,4 @@
 # force_field
 force_field/*.pdb
-result
+Results/*.csv
 force_field/MIL101*
