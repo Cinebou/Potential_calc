@@ -6,13 +6,13 @@ from math import radians, cos, sin
 from os import path, mkdir
 import log_output
 
-cell_L_x = 62.840 
-cell_L_y = 62.840 
-cell_L_z = 62.840 
+cell_L_x = 60.036 
+cell_L_y = 59.941
+cell_L_z = 59.848  
 
-cell_angle_a = radians(60)	
-cell_angle_b = radians(60)
-cell_angle_c = radians(60)
+cell_angle_a = radians(59.36)	
+cell_angle_b = radians(59.56)
+cell_angle_c = radians(59.55)
 
 global ax, bx, by, cx, cy, cz, file_name
 ax = cell_L_x
@@ -22,13 +22,15 @@ cx = cell_L_z*cos(cell_angle_b)
 cy = cell_L_z*(cos(cell_angle_a)-cos(cell_angle_b)*cos(cell_angle_c))/sin(cell_angle_c)
 cz = sqrt(cell_L_z**2 - cx**2 - cy**2)
 
+file_name = 'NH2-MIL101_298/'
+
 if not path.exists('./Results'):
     mkdir('./Results')
 
 def main():
-    temp_pres = '298.15_100000'
-    CO2_file = './force_field/VMD/'+temp_pres+'.pdb'
-    frame_file = './force_field/MIL-101_all.pdb'
+    temp_pres = file_name + 'MIL-101-NH2_1bar_298'
+    CO2_file = './force_field/'+temp_pres+'.pdb'
+    frame_file = './force_field/'+file_name+'Framework_MIL101-NH2.pdb'
     Results_file_name = './Results/'+temp_pres+'.csv'
     mil101 = Potential(CO2_file, frame_file, Results_file_name)
     #mil101.LJ_graph()
@@ -67,9 +69,9 @@ class Potential(object):
     # read the parameters for potential functions
     def __import_potential(self):
         col_names = ['atom_type', 'function type', 'epsilon', 'sigma']
-        self.LJ_pot = pd.read_csv('./force_field/force_field_mixing_rules.def', skiprows=7,  delim_whitespace = True, names=col_names)
+        self.LJ_pot = pd.read_csv('./force_field/'+file_name+'force_field_mixing_rules.def', skiprows=7,  delim_whitespace = True, names=col_names)
         col_names = ["atom_type","print","as","chem","oxidation" ,"mass","charge","polarization","B-factor"," radii","connectivity","anisotropic","anisotropic-type","tinker-type"]
-        self.charges = pd.read_csv('./force_field/pseudo_atoms.def', skiprows=3,  delim_whitespace = True, names=col_names)
+        self.charges = pd.read_csv('./force_field/'+file_name+'pseudo_atoms.def', skiprows=3,  delim_whitespace = True, names=col_names)
         self.__modify_name()
 
 

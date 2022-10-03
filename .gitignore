@@ -2,3 +2,4 @@
 force_field/*.pdb
 Results/*.csv
 force_field/MIL101*
+Log/*.csv
